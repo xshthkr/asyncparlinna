@@ -15,6 +15,7 @@ int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
     int sdtype_size, rdtype_size;
     void *psnd, *prcv;
     MPI_Request req;
+    MPI_Aint slb, rlb;
     MPI_Aint sext, rext;
 
     MPI_Comm_rank(comm, &rank);
@@ -24,8 +25,8 @@ int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
     MPI_Type_size(sendtype, &sdtype_size);
     MPI_Type_size(recvtype, &rdtype_size);
 
-    MPI_Type_extent(sendtype, &sext);
-    MPI_Type_extent(sendtype, &rext);
+    MPI_Type_get_extent(sendtype, &slb, &sext);
+    MPI_Type_get_extent(sendtype, &rlb, &rext);
 
 
    /* Perform pairwise exchange starting from 1 since local exchange is done */
