@@ -29,7 +29,11 @@ int gpu_exclusive_or_alltoallv_s1(
     if (recvcounts[rank] > 0) {
         void *d_src = (char*)d_sendbuf + sdispls[rank] * sext;
         void *d_dst = (char*)d_recvbuf + rdispls[rank] * rext;
-        cudaMemcpy(d_dst, d_src, recvcounts[rank] * rext, cudaMemcpyDeviceToDevice);
+        cudaError_t cuda_err = cudaMemcpy(d_dst, d_src, recvcounts[rank] * rext, cudaMemcpyDeviceToDevice);
+        if (cudaSuccess != cuda_err) {
+            fprintf(stderr, "Rank %d: CUDA memcpy self copy failed: %s\n", rank, cudaGetErrorString(cuda_err));
+            return -1;
+        }
     }
 
     for (step = 1; step < size; ++step) {
@@ -77,10 +81,13 @@ int gpu_exclusive_or_alltoallv_s2(
     MPI_Type_get_extent(recvtype, NULL, &rext);
 
     // self copy
-    if (recvcounts[rank] > 0) {
-        void *d_src = (char*)d_sendbuf + sdispls[rank] * sext;
-        void *d_dst = (char*)d_recvbuf + rdispls[rank] * rext;
-        cudaMemcpy(d_dst, d_src, recvcounts[rank] * rext, cudaMemcpyDeviceToDevice);
+    d_psnd = (char*)d_sendbuf + sdispls[rank] * sext;
+    d_prcv = (char*)d_recvbuf + rdispls[rank] * rext;
+    size_t bytes_to_copy = recvcounts[rank] * rext;
+    cudaError_t cuda_err = cudaMemcpy(d_prcv, d_prcv, bytes_to_copy, cudaMemcpyDeviceToDevice);
+    if (cudaSuccess != cuda_err) {
+        fprintf(stderr, "Rank %d: CUDA memcpy self copy failed: %s\n", rank, cudaGetErrorString(cuda_err));
+        return -1;
     }
 
     for (step = 1; step < size; step++) {
