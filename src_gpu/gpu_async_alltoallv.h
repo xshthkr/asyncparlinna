@@ -38,7 +38,12 @@ int gpu_MPICH_intra_scattered(
 	char *d_recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype, 
 	MPI_Comm comm);
 
-int gpu_exclusive_or_alltoallv(
+int gpu_exclusive_or_alltoallv_s1(
+    char *d_sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype,
+    char *d_recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype,
+    MPI_Comm comm);
+
+int gpu_exclusive_or_alltoallv_s2(
     char *d_sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype,
     char *d_recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype,
     MPI_Comm comm);
