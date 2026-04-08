@@ -27,9 +27,13 @@ int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
     MPI_Type_get_extent(sendtype, NULL, &sext);
     MPI_Type_get_extent(recvtype, NULL, &rext);
 
+    // self copy optimization
+    psnd = (char *) sendbuf + sdispls[rank] * sext;
+    prcv = (char *) recvbuf + rdispls[rank] * rext;
+    memcpy(prcv, psnd, recvcounts[rank] * rext);
 
    /* Perform pairwise exchange starting from 1 since local exchange is done */
-    for (step = 0; step < size; step++) {
+    for (step = 1; step < size; step++) {
         req = MPI_REQUEST_NULL;
 
         /* Determine sender and receiver for this step. */
