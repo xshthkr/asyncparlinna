@@ -48,20 +48,29 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 									   MPI_Datatype sendtype, char *recvbuf, int *recvcounts, int *rdispls,
 									   MPI_Datatype recvtype, MPI_Comm comm);
 
-int MPICH_intra_scattered(int bblock, char *sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype,
-						  char *recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype, MPI_Comm comm);
 
-int ompi_alltoallv_intra_basic_linear(char *sendbuf, int *sendcounts, int *sdispls,
-									  MPI_Datatype sendtype, char *recvbuf, int *recvcounts,
-									  int *rdispls, MPI_Datatype recvtype, MPI_Comm comm);
+/* baseline algorithms */
 
-int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
-									  MPI_Datatype sendtype, char *recvbuf, int *recvcounts,
-									  int *rdispls, MPI_Datatype recvtype, MPI_Comm comm);
+int MPICH_intra_scattered(
+	int bblock,
+	char *sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype,
+	char *recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype,
+	MPI_Comm comm);
 
-int exclisive_or_alltoallv(char *sendbuf, int *sendcounts,
-					       int *sdispls, MPI_Datatype sendtype, char *recvbuf,
-						   int *recvcounts, int *rdispls, MPI_Datatype recvtype, MPI_Comm comm);
+int ompi_alltoallv_intra_basic_linear(
+	char *sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype, 
+	char *recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype, 
+	MPI_Comm comm);
+
+int ompi_alltoallv_intra_pairwise(
+	char *sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype, 
+	char *recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype, 
+	MPI_Comm comm);
+
+int exclusive_or_alltoallv(
+	char *sendbuf, int *sendcounts, int *sdispls, MPI_Datatype sendtype, 
+	char *recvbuf, int *recvcounts, int *rdispls, MPI_Datatype recvtype, 
+	MPI_Comm comm);
 
 int twolayer_communicator_linear(int n, char *sendbuf, int *sendcounts, int *sdispls,
 								 MPI_Datatype sendtype, char *recvbuf, int *recvcounts, int *rdispls,

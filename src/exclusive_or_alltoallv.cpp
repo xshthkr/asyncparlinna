@@ -9,7 +9,7 @@
 #include "rbruckv.h"
 
  /* This algorithm only works when P is power of 2 */
-int exclisive_or_alltoallv(char *sendbuf, int *sendcounts,
+int exclusive_or_alltoallv(char *sendbuf, int *sendcounts,
 					       int *sdispls, MPI_Datatype sendtype, char *recvbuf,
 						   int *recvcounts, int *rdispls, MPI_Datatype recvtype, MPI_Comm comm)
 {

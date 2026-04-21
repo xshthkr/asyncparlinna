@@ -200,14 +200,14 @@ static void run_rbruckv(int loopcount, int ncores, int nprocs, std::vector<int> 
 
 			MPI_Barrier(MPI_COMM_WORLD);
 
-			// exclisive_or_alltoallv (limit: P is powers of 2)
+			// exclusinve_or_alltoallv (limit: P is powers of 2)
 //			for (int it = 0; it < loopcount; it++) {
 				st = MPI_Wtime();
-				mpi_errno = exclisive_or_alltoallv((char*)send_buffer, sendcounts, sdispls, MPI_UNSIGNED_LONG_LONG, (char*)recv_buffer, recvcounts, rdispls, MPI_UNSIGNED_LONG_LONG, MPI_COMM_WORLD);
+				mpi_errno = exclusive_or_alltoallv((char*)send_buffer, sendcounts, sdispls, MPI_UNSIGNED_LONG_LONG, (char*)recv_buffer, recvcounts, rdispls, MPI_UNSIGNED_LONG_LONG, MPI_COMM_WORLD);
 				et = MPI_Wtime();
 				total_time = et - st;
 
-				if (mpi_errno != MPI_SUCCESS) { std::cout << "exclisive_or_alltoallv fail!" <<std::endl; }
+				if (mpi_errno != MPI_SUCCESS) { std::cout << "exclusive_or_alltoallv fail!" <<std::endl; }
 
 				// check correctness
 				error = check_errors(recvcounts, recv_buffer, rank, nprocs);
