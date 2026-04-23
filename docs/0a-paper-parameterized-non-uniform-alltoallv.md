@@ -2,14 +2,24 @@ The paper "Parameterized Algorithms for Non-uniform All-to-all" addresses the `M
 
 The standard `MPI_alltoall` (*UNIFORM* alltoall) vendor implementations have linear and logarithmic time algorithms. *NON-UNIFORM* alltoall is a generalizaiton of uniform alltoall and the vendor MPI implementations often fall back to the slower linear algorithms.
 
+In `MPI_Alltoallv` process i sends `send_sizes[i][j]` bytes to process j. This is a sparse irregular communication matrix. Naive algorithms loop over all pairs causing high latency overhead, low bandwidth, no exploitation of fast intra-node paths. Logarithmic methods struggle with non-uniform data because some processes finish early and others stall, can't pre-allocate fixed-size buffers, message aggregation is no longer trivial.
+
 2 key improvements that can be made to the non-uniform alltoall algorithm:
 - They dont leverage faster logarithmic algorithsm that work well for some data sizes
 - They ignore the hierarchy of the system (intra-node comms are faster than inter-node comms)
 
 The authors introduced 2 parameterized algorithms that can be tuned to suit the system and problem.
-- ParLogNa (parameterized logarithmic non-uniform alltoall) minimizes the number of communicaiotn steps (latency). This is significant for small message sizes.
-- ParLinNa (parameterized linear non-uniform alltoall) optimizes bandwidth usage and distinguishes between comms that are intra-node and inter-node.
+- ParLogNa (parameterized logarithmic non-uniform alltoall) minimizes the number of communicaiotn steps (latency). This is significant for small message sizes. Parameterized tree construction. Tunable radix to balance depth with congestion.
+- ParLinNa (parameterized linear non-uniform alltoall) optimizes bandwidth usage and distinguishes between comms that are intra-node and inter-node. First aggregates data within nodes, then performans internode exchange with optimized pairing. Parameters to tune weights for inter-node vs intra-node costs on hardware. are two types of algorithms for `MPI_Alltoallv` (non-uniform data exchange), and both.
 
-Tuning the algorithms is tuning the tradeoff between minimizing latency and maximizing bandwidth.
+Tuning the algorithms is tuning the tradeoff between minimizing latency and maximizing bandwidth. Bandwidthmaxxing by aggregating many small messages into larger transfers. Latency minimizing by reducing the number of communication rounds.
 
+Inra-node communication within a single physical machine
+- shared memory
+- high bandwidth
+- low latency
+
+Inter-node communication across network
+- higher latency
+- lower bandwidth
 
