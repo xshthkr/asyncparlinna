@@ -31,7 +31,7 @@ int TTPL_rbruck_alltoallv(int n, int r, char *sendbuf, int *sendcounts,
 	int ngroup, sw, gw, glpow;
 	int grank, gid, max1, max2, max_sd;
 	int local_max_count = 0, max_send_count = 0, id = 0;
-	int updated_sentcouts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
+	int updated_sendcounts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
 	char *temp_send_buffer, *extra_buffer, *temp_recv_buffer;
 
 	ngroup = ceil(nprocs / float(n)); // number of groups
@@ -76,7 +76,7 @@ int TTPL_rbruck_alltoallv(int n, int r, char *sendbuf, int *sendcounts,
 
 	st = MPI_Wtime();
 	memset(pos_status, 0, nprocs*sizeof(int));
-	memcpy(updated_sentcouts, sendcounts, nprocs*sizeof(int));
+	memcpy(updated_sendcounts, sendcounts, nprocs*sizeof(int));
 	temp_send_buffer = (char*) malloc(max_send_count*typesize*max_sd);
 	extra_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 	temp_recv_buffer = (char*) malloc(max_send_count*typesize*max_sd);
@@ -113,13 +113,13 @@ int TTPL_rbruck_alltoallv(int n, int r, char *sendbuf, int *sendcounts,
 			int sendCount = 0, offset = 0;
 			for (int i = 0; i < di; i++) {
 				int send_index = rotate_index_array[sent_blocks[i]];
-				metadata_send[i] = updated_sentcouts[send_index];
+				metadata_send[i] = updated_sendcounts[send_index];
 
 				if (pos_status[send_index] == 0 )
-					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcouts[send_index]*typesize);
+					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sendcounts[send_index]*typesize);
 				else
-					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcouts[send_index]*typesize);
-				offset += updated_sentcouts[send_index]*typesize;
+					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sendcounts[send_index]*typesize);
+				offset += updated_sendcounts[send_index]*typesize;
 			}
 
 			int recv_proc = gid*n + (grank + spoint) % n; // receive data from rank + 2^step process
@@ -158,7 +158,7 @@ int TTPL_rbruck_alltoallv(int n, int r, char *sendbuf, int *sendcounts,
 
 				offset += metadata_recv[i]*typesize;
 				pos_status[send_index] = 1;
-				updated_sentcouts[send_index] = metadata_recv[i];
+				updated_sendcounts[send_index] = metadata_recv[i];
 			}
 			et = MPI_Wtime();
 			replace_time += et - st;
@@ -199,7 +199,7 @@ int TTPL_rbruck_alltoallv(int n, int r, char *sendbuf, int *sendcounts,
 				id = inter_rotate[sent_blocks[i]];
 				for (int j = 0; j < n; j++) {
 					int ci = id*n + j;
-					int dc = updated_sentcouts[rotate_index_array[ci]];
+					int dc = updated_sendcounts[rotate_index_array[ci]];
 					if (ci % n == grank)
 						memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[ci]*typesize], dc*typesize);
 					else
@@ -253,7 +253,7 @@ int TTPL_BT_alltoallv(int n, int r, int bblock, char *sendbuf, int *sendcounts,
 	int ngroup, sw;
 	int grank, gid, imax, max_sd;
 	int local_max_count = 0, max_send_count = 0, id = 0;
-	int updated_sentcouts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
+	int updated_sentcounts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
 	char *temp_send_buffer, *extra_buffer, *temp_recv_buffer;
 	int mpi_errno = MPI_SUCCESS;
 
@@ -298,7 +298,7 @@ int TTPL_BT_alltoallv(int n, int r, int bblock, char *sendbuf, int *sendcounts,
 
 	st = MPI_Wtime();
 	memset(pos_status, 0, nprocs*sizeof(int));
-	memcpy(updated_sentcouts, sendcounts, nprocs*sizeof(int));
+	memcpy(updated_sentcounts, sendcounts, nprocs*sizeof(int));
 	temp_send_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 	extra_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 	temp_recv_buffer = (char*) malloc(max_send_count*typesize*max_sd);
@@ -333,13 +333,13 @@ int TTPL_BT_alltoallv(int n, int r, int bblock, char *sendbuf, int *sendcounts,
 			int sendCount = 0, offset = 0;
 			for (int i = 0; i < di; i++) {
 				int send_index = rotate_index_array[sent_blocks[i]];
-				metadata_send[i] = updated_sentcouts[send_index];
+				metadata_send[i] = updated_sentcounts[send_index];
 
 				if (pos_status[send_index] == 0 )
-					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcouts[send_index]*typesize);
+					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcounts[send_index]*typesize);
 				else
-					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcouts[send_index]*typesize);
-				offset += updated_sentcouts[send_index]*typesize;
+					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcounts[send_index]*typesize);
+				offset += updated_sentcounts[send_index]*typesize;
 			}
 
 			int recv_proc = gid*n + (grank + spoint) % n; // receive data from rank + 2^step process
@@ -373,7 +373,7 @@ int TTPL_BT_alltoallv(int n, int r, int bblock, char *sendbuf, int *sendcounts,
 
 				offset += metadata_recv[i]*typesize;
 				pos_status[send_index] = 1;
-				updated_sentcouts[send_index] = metadata_recv[i];
+				updated_sentcounts[send_index] = metadata_recv[i];
 			}
 			et = MPI_Wtime();
 			replace_time += et - st;
@@ -387,7 +387,7 @@ int TTPL_BT_alltoallv(int n, int r, int bblock, char *sendbuf, int *sendcounts,
 	// organize data
 	int index = 0;
 	for (int i = 0; i < nprocs; i++) {
-		int d = updated_sentcouts[rotate_index_array[i]]*typesize;
+		int d = updated_sentcounts[rotate_index_array[i]]*typesize;
 		if (grank == (i % n) ) {
 			memcpy(&temp_send_buffer[index], &sendbuf[sdispls[i]*typesize], d);
 		}
@@ -409,7 +409,7 @@ int TTPL_BT_alltoallv(int n, int r, int bblock, char *sendbuf, int *sendcounts,
 		nsend[i] = 0, nrecv[i] = 0;
 		for (int j = 0; j < n; j++) {
 			int id = i * n + j;
-			int sn = updated_sentcouts[rotate_index_array[id]];
+			int sn = updated_sentcounts[rotate_index_array[id]];
 			nsend[i] += sn;
 			nrecv[i] += recvcounts[id];
 		}
@@ -483,7 +483,7 @@ int TTPL_BT_alltoallv_s1(int n, int r, int bblock, char *sendbuf, int *sendcount
 	int ngroup, sw;
 	int grank, gid, imax, max_sd;
 	int local_max_count = 0, max_send_count = 0, id = 0;
-	int updated_sentcouts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
+	int updated_sentcounts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
 	char *temp_send_buffer, *extra_buffer, *temp_recv_buffer;
 	int mpi_errno = MPI_SUCCESS;
 
@@ -528,7 +528,7 @@ int TTPL_BT_alltoallv_s1(int n, int r, int bblock, char *sendbuf, int *sendcount
 
 	st = MPI_Wtime();
 	memset(pos_status, 0, nprocs*sizeof(int));
-	memcpy(updated_sentcouts, sendcounts, nprocs*sizeof(int));
+	memcpy(updated_sentcounts, sendcounts, nprocs*sizeof(int));
 	temp_send_buffer = (char*) malloc(max_send_count*typesize*max_sd);
 	extra_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 	temp_recv_buffer = (char*) malloc(max_send_count*typesize*max_sd);
@@ -564,13 +564,13 @@ int TTPL_BT_alltoallv_s1(int n, int r, int bblock, char *sendbuf, int *sendcount
 			int sendCount = 0, offset = 0;
 			for (int i = 0; i < di; i++) {
 				int send_index = rotate_index_array[sent_blocks[i]];
-				metadata_send[i] = updated_sentcouts[send_index];
+				metadata_send[i] = updated_sentcounts[send_index];
 
 				if (pos_status[send_index] == 0 )
-					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcouts[send_index]*typesize);
+					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcounts[send_index]*typesize);
 				else
-					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcouts[send_index]*typesize);
-				offset += updated_sentcouts[send_index]*typesize;
+					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcounts[send_index]*typesize);
+				offset += updated_sentcounts[send_index]*typesize;
 			}
 
 			int recv_proc = gid*n + (grank + spoint) % n; // receive data from rank + 2^step process
@@ -610,7 +610,7 @@ int TTPL_BT_alltoallv_s1(int n, int r, int bblock, char *sendbuf, int *sendcount
 
 				offset += metadata_recv[i]*typesize;
 				pos_status[send_index] = 1;
-				updated_sentcouts[send_index] = metadata_recv[i];
+				updated_sentcounts[send_index] = metadata_recv[i];
 			}
 			et = MPI_Wtime();
 			replace_time += et - st;
@@ -656,7 +656,7 @@ int TTPL_BT_alltoallv_s1(int n, int r, int bblock, char *sendbuf, int *sendcount
 			int dst = ndst * n + grank;
 			id = ndst * n + gr;
 
-			int ds = updated_sentcouts[rotate_index_array[id]]*typesize;
+			int ds = updated_sentcounts[rotate_index_array[id]]*typesize;
 			if (gr == grank) {
 				mpi_errno = MPI_Isend(&sendbuf[sdispls[id]*typesize], ds, MPI_CHAR, dst, gr, comm, &reqarray[req_cnt++]);
 			}
@@ -711,7 +711,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 	int ngroup, sw;
 	int grank, gid, imax, max_sd;
 	int local_max_count = 0, max_send_count = 0, id = 0;
-	int updated_sentcouts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
+	int updated_sentcounts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
 	char *temp_send_buffer, *extra_buffer, *temp_recv_buffer;
 	int mpi_errno = MPI_SUCCESS;
 
@@ -756,7 +756,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 
 	st = MPI_Wtime();
 	memset(pos_status, 0, nprocs*sizeof(int));
-	memcpy(updated_sentcouts, sendcounts, nprocs*sizeof(int));
+	memcpy(updated_sentcounts, sendcounts, nprocs*sizeof(int));
 	temp_send_buffer = (char*) malloc(max_send_count*typesize*max_sd);
 	extra_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 	temp_recv_buffer = (char*) malloc(max_send_count*typesize*max_sd);
@@ -794,13 +794,13 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 			int sendCount = 0, offset = 0;
 			for (int i = 0; i < di; i++) {
 				int send_index = rotate_index_array[sent_blocks[i]];
-				metadata_send[i] = updated_sentcouts[send_index];
+				metadata_send[i] = updated_sentcounts[send_index];
 
 				if (pos_status[send_index] == 0 )
-					memcpy(&temp_send_buffer[offset], &sendcopy[sdispls[send_index]*typesize], updated_sentcouts[send_index]*typesize);
+					memcpy(&temp_send_buffer[offset], &sendcopy[sdispls[send_index]*typesize], updated_sentcounts[send_index]*typesize);
 				else
-					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcouts[send_index]*typesize);
-				offset += updated_sentcouts[send_index]*typesize;
+					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcounts[send_index]*typesize);
+				offset += updated_sentcounts[send_index]*typesize;
 			}
 
 			int recv_proc = gid*n + (grank + spoint) % n; // receive data from rank + 2^step process
@@ -840,7 +840,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 
 				offset += metadata_recv[i]*typesize;
 				pos_status[send_index] = 1;
-				updated_sentcouts[send_index] = metadata_recv[i];
+				updated_sentcounts[send_index] = metadata_recv[i];
 			}
 			et = MPI_Wtime();
 			replace_time += et - st;
@@ -886,7 +886,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 			int dst = ndst * n + grank;
 			id = ndst * n + gr;
 
-			int ds = updated_sentcouts[rotate_index_array[id]]*typesize;
+			int ds = updated_sentcounts[rotate_index_array[id]]*typesize;
 			if (gr == grank) {
 				mpi_errno = MPI_Isend(&sendcopy[sdispls[id]*typesize], ds, MPI_CHAR, dst, gr, comm, &reqarray[req_cnt++]);
 			}
@@ -932,7 +932,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 //	int ngroup, sw;
 //	int grank, gid, imax, max_sd;
 //	int local_max_count = 0, max_send_count = 0, id = 0;
-//	int updated_sentcouts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
+//	int updated_sentcounts[nprocs], rotate_index_array[nprocs], pos_status[nprocs];
 //	char *temp_send_buffer, *extra_buffer, *temp_recv_buffer;
 //
 //	ngroup = ceil(nprocs / float(n));  // number of groups
@@ -972,7 +972,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 //
 //	st = MPI_Wtime();
 //	memset(pos_status, 0, nprocs*sizeof(int));
-//	memcpy(updated_sentcouts, sendcounts, nprocs*sizeof(int));
+//	memcpy(updated_sentcounts, sendcounts, nprocs*sizeof(int));
 //	temp_send_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 //	extra_buffer = (char*) malloc(max_send_count*typesize*nprocs);
 //	temp_recv_buffer = (char*) malloc(max_send_count*typesize*max_sd);
@@ -1008,13 +1008,13 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 //			int sendCount = 0, offset = 0;
 //			for (int i = 0; i < di; i++) {
 //				int send_index = rotate_index_array[sent_blocks[i]];
-//				metadata_send[i] = updated_sentcouts[send_index];
+//				metadata_send[i] = updated_sentcounts[send_index];
 //
 //				if (pos_status[send_index] == 0 )
-//					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcouts[send_index]*typesize);
+//					memcpy(&temp_send_buffer[offset], &sendbuf[sdispls[send_index]*typesize], updated_sentcounts[send_index]*typesize);
 //				else
-//					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcouts[send_index]*typesize);
-//				offset += updated_sentcouts[send_index]*typesize;
+//					memcpy(&temp_send_buffer[offset], &extra_buffer[sent_blocks[i]*max_send_count*typesize], updated_sentcounts[send_index]*typesize);
+//				offset += updated_sentcounts[send_index]*typesize;
 //			}
 //
 //			int recv_proc = gid*n + (grank + spoint) % n; // receive data from rank + 2^step process
@@ -1054,7 +1054,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 //
 //				offset += metadata_recv[i]*typesize;
 //				pos_status[send_index] = 1;
-//				updated_sentcouts[send_index] = metadata_recv[i];
+//				updated_sentcounts[send_index] = metadata_recv[i];
 //			}
 //			et = MPI_Wtime();
 //			replace_time += et - st;
@@ -1069,7 +1069,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 //	// organize data
 //	int index = 0;
 //	for (int i = 0; i < nprocs; i++) {
-//		int d = updated_sentcouts[rotate_index_array[i]]*typesize;
+//		int d = updated_sentcounts[rotate_index_array[i]]*typesize;
 //		if (grank == (i % n) ) {
 //			memcpy(&temp_send_buffer[index], &sendbuf[sdispls[i]*typesize], d);
 //		}
@@ -1099,7 +1099,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 //			for (int k = 0; k < bs; k++) {
 //				int pid =  i * nblock*bs + j*bs + k;
 //				if (pid > nprocs - 1) { bflag = 1; break; }
-//				int sn = updated_sentcouts[rotate_index_array[pid]];
+//				int sn = updated_sentcounts[rotate_index_array[pid]];
 //				nsend[id] += sn;
 //				nrecv[id] += recvcounts[id];
 //			}
@@ -1129,7 +1129,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 ////
 //////	for (int i = 0; i < ngroup; i++) {
 //////		id = grank + i*n;
-//////		int ds = updated_sentcouts[rotate_index_array[id]]*typesize;
+//////		int ds = updated_sentcounts[rotate_index_array[id]]*typesize;
 //////		memcpy(&extra_buffer[id*max_send_count*typesize], &sendbuf[sdispls[id]*typesize], ds);
 //////	}
 ////
@@ -1196,7 +1196,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 ////			for (int k = 0; k < bs; k++) {
 ////				id = ndst*n + j*bs+k;
 ////				if (id > nprocs) { break; }
-////				scount += updated_sentcouts[rotate_index_array[id]]*typesize;
+////				scount += updated_sentcounts[rotate_index_array[id]]*typesize;
 ////			}
 ////
 ////			MPI_Isend(&extra_buffer[ssp*max_send_count*typesize], ds, MPI_CHAR, dst, j, comm, &req[nquest++]);
@@ -1209,7 +1209,7 @@ int TTPL_BT_alltoallv_s2(int n, int r, int bblock, char *sendbuf, int *sendcount
 ////
 ////		for (int j = 0; j < n; j++) {
 ////			id = ndst*n+j;
-////			int ds = updated_sentcouts[rotate_index_array[id]]*typesize;
+////			int ds = updated_sentcounts[rotate_index_array[id]]*typesize;
 ////			if (j == grank) {
 ////				MPI_Isend(&sendbuf[sdispls[id]*typesize], ds, MPI_CHAR, dst, j, comm, &req[nquest++]);
 ////			}
