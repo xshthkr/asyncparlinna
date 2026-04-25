@@ -15,7 +15,6 @@ int ompi_alltoallv_intra_basic_linear(char *sendbuf, int *sendcounts, int *sdisp
     int i, size, rank, err, nreqs;
     int sdtype_size, rdtype_size;
     char *psnd, *prcv;
-    MPI_Aint sext, rext;
     MPI_Request *preq;
 
     MPI_Comm_rank(comm, &rank);
@@ -25,13 +24,10 @@ int ompi_alltoallv_intra_basic_linear(char *sendbuf, int *sendcounts, int *sdisp
     MPI_Type_size(sendtype, &sdtype_size);
     MPI_Type_size(recvtype, &rdtype_size);
 
-    MPI_Type_get_extent(sendtype, NULL, &sext);
-    MPI_Type_get_extent(recvtype, NULL, &rext);
-
     /* Simple optimization - handle send to self first */
-    psnd = (char *) sendbuf + sdispls[rank] * sext;
-    prcv = (char *) recvbuf + rdispls[rank] * rext;
-    memcpy(prcv, psnd, recvcounts[rank]*rext);
+    psnd = (char *) sendbuf + sdispls[rank] * sdtype_size;
+    prcv = (char *) recvbuf + rdispls[rank] * sdtype_size;
+    memcpy(prcv, psnd, recvcounts[rank] * rdtype_size);
 
     if (sendcounts[rank] < 0) { return -1; }
 
@@ -47,7 +43,7 @@ int ompi_alltoallv_intra_basic_linear(char *sendbuf, int *sendcounts, int *sdisp
         if (i == rank) { continue; }
 
         if (0 < recvcounts[i]) {
-            prcv = (char *) (recvbuf + rdispls[i] * rext);
+            prcv = (char *) (recvbuf + rdispls[i] * rdtype_size);
             err = MPI_Irecv(prcv, recvcounts[i], recvtype, i, 0, comm, &preq[nreqs]);
             if (MPI_SUCCESS != err) { return -1; }
            	nreqs++;
@@ -59,7 +55,7 @@ int ompi_alltoallv_intra_basic_linear(char *sendbuf, int *sendcounts, int *sdisp
         if (i == rank) { continue; }
 
         if (0 < sendcounts[i]) {
-            psnd = (char *) (sendbuf + sdispls[i] * sext);
+            psnd = (char *) (sendbuf + sdispls[i] * sdtype_size);
             err = MPI_Isend(psnd, sendcounts[i], sendtype, i, 0, comm, &preq[nreqs]);
             if (MPI_SUCCESS != err) { return -1; }
             nreqs++;

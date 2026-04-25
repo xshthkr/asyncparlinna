@@ -16,7 +16,6 @@ int exclusive_or_alltoallv(char *sendbuf, int *sendcounts,
     int rank, size, src, dst, step;
     int sdtype_size, rdtype_size;
     void *psnd, *prcv;
-    MPI_Aint sext, rext;
 
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
@@ -34,15 +33,12 @@ int exclusive_or_alltoallv(char *sendbuf, int *sendcounts,
     MPI_Type_size(sendtype, &sdtype_size);
     MPI_Type_size(recvtype, &rdtype_size);
 
-    MPI_Type_get_extent(sendtype, NULL, &sext);
-    MPI_Type_get_extent(recvtype, NULL, &rext);
-
     for (step = 0; step < size; step++) {
     	src = dst = rank ^ step;
-    	psnd = (char *) (sendbuf + sdispls[dst]*sext);
-    	prcv = (char *) (recvbuf + rdispls[src]*rext);
-    	MPI_Sendrecv(psnd, sendcounts[dst]*sext, MPI_CHAR, dst, 0,
-    			prcv, recvcounts[src]*rext, MPI_CHAR, src, 0, comm, MPI_STATUS_IGNORE);
+    	psnd = (char *) (sendbuf + sdispls[dst] * sdtype_size);
+    	prcv = (char *) (recvbuf + rdispls[src] * rdtype_size);
+    	MPI_Sendrecv(psnd, sendcounts[dst], sendtype, dst, 0,
+    			prcv, recvcounts[src], recvtype, src, 0, comm, MPI_STATUS_IGNORE);
     }
 
 	return MPI_SUCCESS;

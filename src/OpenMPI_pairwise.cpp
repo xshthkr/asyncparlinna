@@ -15,7 +15,6 @@ int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
     int sdtype_size, rdtype_size;
     void *psnd, *prcv;
     MPI_Request req;
-    MPI_Aint sext, rext;
 
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
@@ -24,13 +23,10 @@ int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
     MPI_Type_size(sendtype, &sdtype_size);
     MPI_Type_size(recvtype, &rdtype_size);
 
-    MPI_Type_get_extent(sendtype, NULL, &sext);
-    MPI_Type_get_extent(recvtype, NULL, &rext);
-
     // self copy optimization
-    psnd = (char *) sendbuf + sdispls[rank] * sext;
-    prcv = (char *) recvbuf + rdispls[rank] * rext;
-    memcpy(prcv, psnd, recvcounts[rank] * rext);
+    psnd = (char *) sendbuf + sdispls[rank] * sdtype_size;
+    prcv = (char *) recvbuf + rdispls[rank] * rdtype_size;
+    memcpy(prcv, psnd, recvcounts[rank] * rdtype_size);
 
    /* Perform pairwise exchange starting from 1 since local exchange is done */
     for (step = 1; step < size; step++) {
@@ -41,8 +37,8 @@ int ompi_alltoallv_intra_pairwise(char *sendbuf, int *sendcounts, int *sdispls,
         recvfrom = (rank + size - step) % size;
 
         /* Determine sending and receiving locations */
-        psnd = (char*)sendbuf + sdispls[sendto] * sext;
-        prcv = (char*)recvbuf + rdispls[recvfrom] * rext;
+        psnd = (char*)sendbuf + sdispls[sendto] * sdtype_size;
+        prcv = (char*)recvbuf + rdispls[recvfrom] * rdtype_size;
 
         /* send and receive */
         if (0 < recvcounts[recvfrom] && 0 < rdtype_size) {

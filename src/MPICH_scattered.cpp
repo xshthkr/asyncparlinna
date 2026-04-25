@@ -14,7 +14,7 @@ int MPICH_intra_scattered(int bblock, char *sendbuf, int *sendcounts, int *sdisp
 {
 
     int comm_size, i;
-    int send_extent, recv_extent;
+    int sdtype_size, rdtype_size;
     int dst, rank, req_cnt;
     MPI_Request *reqarray;
     MPI_Status *starray;
@@ -25,8 +25,8 @@ int MPICH_intra_scattered(int bblock, char *sendbuf, int *sendcounts, int *sdisp
     MPI_Comm_size(comm, &comm_size);
 
     /* Get extent of send and recv types */
-    MPI_Type_size(sendtype, &send_extent);
-    MPI_Type_size(recvtype, &recv_extent);
+    MPI_Type_size(sendtype, &sdtype_size);
+    MPI_Type_size(recvtype, &rdtype_size);
 
 
     if (bblock <= 0 || bblock > comm_size) bblock = comm_size;
@@ -44,7 +44,7 @@ int MPICH_intra_scattered(int bblock, char *sendbuf, int *sendcounts, int *sdisp
 			dst = (rank + i + ii) % comm_size;
 
 			if (recvcounts[dst]) {
-				mpi_errno = MPI_Irecv((char *) recvbuf + rdispls[dst] * recv_extent,
+				mpi_errno = MPI_Irecv((char *) recvbuf + rdispls[dst] * rdtype_size,
 									   recvcounts[dst], recvtype, dst,
 									   0, comm, &reqarray[req_cnt]);
 
@@ -56,7 +56,7 @@ int MPICH_intra_scattered(int bblock, char *sendbuf, int *sendcounts, int *sdisp
 		for (i = 0; i < ss; i++) {
 			dst = (rank - i - ii + comm_size) % comm_size;
 			if (sendcounts[dst]) {
-				mpi_errno = MPI_Isend((char *) sendbuf + sdispls[dst] * send_extent,
+				mpi_errno = MPI_Isend((char *) sendbuf + sdispls[dst] * sdtype_size,
 									   sendcounts[dst], sendtype, dst,
 									   0, comm, &reqarray[req_cnt]);
 
