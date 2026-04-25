@@ -7,6 +7,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 find_package(MPI REQUIRED)
 
 add_subdirectory(src)
+add_subdirectory(async)
 add_subdirectory(examples)
 add_subdirectory(benchmarks)
 
