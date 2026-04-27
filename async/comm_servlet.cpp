@@ -12,12 +12,31 @@
 #include <unistd.h>
 #include <sched.h>
 #include <time.h>
+#include <sys/mman.h>
+#include <hwloc.h>
 
 namespace async_rbruck_alltoallv {
 
 /*
 INTERNAL APIS
 */
+
+void* servlet_malloc(size_t size, bool use_hugepages) {
+    void *ptr = nullptr;
+    // 2MB alignment required for Transparent Huge Pages (THP)
+    if (posix_memalign(&ptr, 2 * 1024 * 1024, size) != 0) {
+        ptr = malloc(size); // fallback
+    }
+    if (ptr && use_hugepages) {
+        // Advise kernel to use hugepages for this mapping
+        madvise(ptr, size, MADV_HUGEPAGE);
+    }
+    return ptr;
+}
+
+void servlet_free(void *ptr) {
+    free(ptr);
+}
 
 static void pin_to_core(int core_id) {
     if (core_id < 0) return;
@@ -172,9 +191,54 @@ static void *servlet_thread_fn(void *arg) {
 PUBLIC APIS
 */
 
+// Forward declarations for utils used in servlet_init
+static int detect_nic_affine_core() {
+    hwloc_topology_t topology;
+    if (hwloc_topology_init(&topology) < 0) return -1;
+    
+    hwloc_topology_set_io_types_filter(topology, HWLOC_TYPE_FILTER_KEEP_ALL);
+    if (hwloc_topology_load(topology) < 0) {
+        hwloc_topology_destroy(topology);
+        return -1;
+    }
+
+    int target_pu { -1 };
+    hwloc_obj_t osdev = nullptr;
+    
+    // Find first OpenFabrics (InfiniBand) device
+    while ((osdev = hwloc_get_next_osdev(topology, osdev)) != nullptr) {
+        if (osdev->attr->osdev.type == HWLOC_OBJ_OSDEV_OPENFABRICS) {
+            hwloc_obj_t non_io = hwloc_get_non_io_ancestor_obj(topology, osdev);
+            if (non_io && non_io->cpuset) {
+                // Find first PU in the CPUSet closest to the NIC
+                hwloc_obj_t pu = hwloc_get_obj_inside_cpuset_by_type(topology, non_io->cpuset, HWLOC_OBJ_PU, 0);
+                if (pu) {
+                    target_pu = pu->os_index;
+                    break;
+                }
+            }
+        }
+    }
+
+    hwloc_topology_destroy(topology);
+    return target_pu;
+}
+
 int servlet_init(ServletContext *ctx, const ServletConfig *config) {
 
     ctx->config = *config;
+
+    // Auto-detect NIC affinity via hwloc if requested
+    if (ctx->config.servlet_core_id == -2) {
+        int core { detect_nic_affine_core() };
+        if (core >= 0) {
+            ctx->config.servlet_core_id = core;
+        } else {
+            // Fallback to no pinning if hwloc fails or no IB device found
+            ctx->config.servlet_core_id = -1;
+        }
+    }
+
     ctx->shutdown.store(false, std::memory_order_relaxed);
     ctx->producer_idx = 0;
 
@@ -184,6 +248,12 @@ int servlet_init(ServletContext *ctx, const ServletConfig *config) {
         ctx->slots[i].send_buffer_capacity = 0;
         ctx->slots[i].sizes_storage = nullptr;
         ctx->slots[i].sizes_ngroup = 0;
+        ctx->slots[i].extra_buffer = nullptr;
+        ctx->slots[i].extra_buffer_capacity = 0;
+        ctx->slots[i].temp_recv_buffer = nullptr;
+        ctx->slots[i].temp_recv_buffer_capacity = 0;
+        ctx->slots[i].chunk_recv_buffer = nullptr;
+        ctx->slots[i].chunk_recv_buffer_capacity = 0;
         ctx->slots[i].post_time = 0;
         ctx->slots[i].progress_time = 0;
         ctx->slots[i].total_time = 0;
@@ -213,12 +283,24 @@ int servlet_shutdown(ServletContext *ctx) {
     /* free slot-owned buffers */
     for (int i { 0 }; i < NUM_SLOTS; i++) {
         if (ctx->slots[i].send_buffer) {
-            free(ctx->slots[i].send_buffer);
+            servlet_free(ctx->slots[i].send_buffer);
             ctx->slots[i].send_buffer = nullptr;
         }
         if (ctx->slots[i].sizes_storage) {
-            free(ctx->slots[i].sizes_storage);
+            free(ctx->slots[i].sizes_storage); // sizes_storage doesn't use THP
             ctx->slots[i].sizes_storage = nullptr;
+        }
+        if (ctx->slots[i].extra_buffer) {
+            servlet_free(ctx->slots[i].extra_buffer);
+            ctx->slots[i].extra_buffer = nullptr;
+        }
+        if (ctx->slots[i].temp_recv_buffer) {
+            servlet_free(ctx->slots[i].temp_recv_buffer);
+            ctx->slots[i].temp_recv_buffer = nullptr;
+        }
+        if (ctx->slots[i].chunk_recv_buffer) {
+            servlet_free(ctx->slots[i].chunk_recv_buffer);
+            ctx->slots[i].chunk_recv_buffer = nullptr;
         }
     }
 
