@@ -77,9 +77,10 @@ struct CommDescriptor {
 config knobs passed to servlet_init()
 */
 struct ServletConfig {
-    int servlet_core_id;        // physical core to pin to (-1 = no pinning)
+    int servlet_core_id;        // physical core to pin to (-1 = no pinning, -2 = auto hwloc NIC-affine)
     int backoff_max_us;         // max idle backoff in microseconds
     int deadlock_timeout_s;     // seconds before fallback MPI_Waitall
+    bool use_hugepages;         // attempt to allocate buffers using MAP_HUGETLB
 };
 
 /*
@@ -87,9 +88,10 @@ returns ServletConfig with sensible defaults
 */
 inline ServletConfig servlet_default_config() {
     ServletConfig c;
-    c.servlet_core_id    = -1;
+    c.servlet_core_id    = -2; // auto detect NIC affinity via hwloc by default
     c.backoff_max_us     = 100;
     c.deadlock_timeout_s = 10;
+    c.use_hugepages      = true;
     return c;
 }
 

@@ -38,6 +38,9 @@ static double SP_time          { 0 };
 
 namespace async_rbruck_alltoallv {
 
+extern void* servlet_malloc(size_t size, bool use_hugepages);
+extern void servlet_free(void *ptr);
+
 /*
 wait until a slot is available for new work
 transitions DONE -> IDLE, spins on READY
@@ -66,26 +69,26 @@ in steady-state loops (same n, nprocs, msg_size), zero allocations
 */
 static void ensure_slot_capacity(
 	ServletSlot *slot, size_t send_bytes, int ngroup,
-	size_t extra_bytes, size_t temp_recv_bytes)
+	size_t extra_bytes, size_t temp_recv_bytes, bool use_hugepages)
 {
 	if (send_bytes > slot->send_buffer_capacity) {
-		if (slot->send_buffer) free(slot->send_buffer);
-		slot->send_buffer = (char*) malloc(send_bytes);
+		if (slot->send_buffer) servlet_free(slot->send_buffer);
+		slot->send_buffer = (char*) servlet_malloc(send_bytes, use_hugepages);
 		slot->send_buffer_capacity = send_bytes;
 	}
 	if (ngroup > slot->sizes_ngroup) {
-		if (slot->sizes_storage) free(slot->sizes_storage);
+		if (slot->sizes_storage) free(slot->sizes_storage); // sizes array is small, standard malloc
 		slot->sizes_storage = (int*) malloc(4 * ngroup * sizeof(int));
 		slot->sizes_ngroup = ngroup;
 	}
 	if (extra_bytes > slot->extra_buffer_capacity) {
-		if (slot->extra_buffer) free(slot->extra_buffer);
-		slot->extra_buffer = (char*) malloc(extra_bytes);
+		if (slot->extra_buffer) servlet_free(slot->extra_buffer);
+		slot->extra_buffer = (char*) servlet_malloc(extra_bytes, use_hugepages);
 		slot->extra_buffer_capacity = extra_bytes;
 	}
 	if (temp_recv_bytes > slot->temp_recv_buffer_capacity) {
-		if (slot->temp_recv_buffer) free(slot->temp_recv_buffer);
-		slot->temp_recv_buffer = (char*) malloc(temp_recv_bytes);
+		if (slot->temp_recv_buffer) servlet_free(slot->temp_recv_buffer);
+		slot->temp_recv_buffer = (char*) servlet_malloc(temp_recv_bytes, use_hugepages);
 		slot->temp_recv_buffer_capacity = temp_recv_bytes;
 	}
 }
@@ -145,7 +148,7 @@ int ParLinNa_servlet(
 	size_t required_send_bytes { static_cast<size_t>(max_send_count) * typesize * nprocs };
 	size_t required_extra_bytes { static_cast<size_t>(max_send_count) * typesize * nprocs };
 	size_t required_recv_bytes { static_cast<size_t>(max_send_count) * typesize * max_sd };
-	ensure_slot_capacity(slot, required_send_bytes, ngroup, required_extra_bytes, required_recv_bytes);
+	ensure_slot_capacity(slot, required_send_bytes, ngroup, required_extra_bytes, required_recv_bytes, servlet_ctx->config.use_hugepages);
 	char *temp_send_buffer { slot->send_buffer };
 
 	st = MPI_Wtime();
