@@ -11,6 +11,7 @@ target_sources(async-overlap
     parlogna.cpp
     parlinna.cpp
     parlinna_servlet.cpp
+    parlinna_servlet_v2.cpp
     comm_servlet.cpp
     utils.cpp
     
