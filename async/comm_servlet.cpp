@@ -34,16 +34,16 @@ static double monotonic_seconds() {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-static void execute_transfers(ServletContext *ctx) {
+static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
 
-    CommDescriptor *desc = &ctx->desc;
+    CommDescriptor *desc = &slot->desc;
 
     int ngroup { desc->ngroup };
     int n { desc->n };
     int gid { desc->gid };
     int grank { desc->grank };
     int bblock { desc->bblock };
-    MPI_Comm comm {desc->comm };
+    MPI_Comm comm { desc->comm };
 
     if (bblock <= 0 || bblock > ngroup) bblock = ngroup;
 
@@ -73,11 +73,11 @@ static void execute_transfers(ServletContext *ctx) {
         }
 
         double post_end { MPI_Wtime() };
-        ctx->post_time += (post_end - post_start);
+        slot->post_time += (post_end - post_start);
 
         /* drive progress with MPI_Testsome */
         int completed_total { 0 };
-        double deadline { monotonic_seconds() + ctx->config.deadlock_timeout_s };
+        double deadline { monotonic_seconds() + config->deadlock_timeout_s };
 
         while (completed_total < req_cnt) {
             int outcount { 0 };
@@ -100,11 +100,11 @@ static void execute_transfers(ServletContext *ctx) {
 
             if (outcount > 0) {
                 completed_total += outcount;
-                deadline = monotonic_seconds() + ctx->config.deadlock_timeout_s;
+                deadline = monotonic_seconds() + config->deadlock_timeout_s;
             } else {
                 /* no progress, check deadlock timeout */
                 if (monotonic_seconds() > deadline) {
-                    fprintf(stderr, "[comm_servlet] WARN: no progress for %ds, falling back to MPI_Waitall\n", ctx->config.deadlock_timeout_s);
+                    fprintf(stderr, "[comm_servlet] WARN: no progress for %ds, falling back to MPI_Waitall\n", config->deadlock_timeout_s);
                     MPI_Waitall(req_cnt, reqs, stats);
                     completed_total = req_cnt;
                     break;
@@ -116,8 +116,7 @@ static void execute_transfers(ServletContext *ctx) {
     }
 
     // todo: only captures time after last batch finishes
-    // capture actual MPI_Testsome loop time
-    ctx->progress_time = MPI_Wtime() - post_start;
+    slot->progress_time = MPI_Wtime() - post_start;
 
     free(reqs);
     free(stats);
@@ -133,22 +132,29 @@ static void *servlet_thread_fn(void *arg) {
 
     while (!ctx->shutdown.load(std::memory_order_acquire)) {
 
-        int state { ctx->state.load(std::memory_order_acquire) };
+        bool did_work { false };
 
-        if (state == static_cast<int>(ServletState::READY)) {
-            backoff_us = 0;
+        for (int s { 0 }; s < NUM_SLOTS; s++) {
+            int state { ctx->slots[s].state.load(std::memory_order_acquire) };
 
-            double t0 { MPI_Wtime() };
-            ctx->post_time = 0;
-            ctx->progress_time = 0;
+            if (state == static_cast<int>(ServletState::READY)) {
+                did_work = true;
+                backoff_us = 0;
 
-            execute_transfers(ctx);
+                double t0 { MPI_Wtime() };
+                ctx->slots[s].post_time = 0;
+                ctx->slots[s].progress_time = 0;
 
-            ctx->total_time = MPI_Wtime() - t0;
+                execute_transfers(&ctx->slots[s], &ctx->config);
 
-            /* signal completion */
-            ctx->state.store(static_cast<int>(ServletState::DONE), std::memory_order_release);
-        } else {
+                ctx->slots[s].total_time = MPI_Wtime() - t0;
+
+                /* signal completion */
+                ctx->slots[s].state.store(static_cast<int>(ServletState::DONE), std::memory_order_release);
+            }
+        }
+
+        if (!did_work) {
             /* adaptive backoff when idle */
             if (backoff_us < ctx->config.backoff_max_us) {
                 backoff_us++;
@@ -170,12 +176,19 @@ int servlet_init(ServletContext *ctx, const ServletConfig *config) {
 
     ctx->config = *config;
     ctx->shutdown.store(false, std::memory_order_relaxed);
-    ctx->state.store(static_cast<int>(ServletState::IDLE), std::memory_order_relaxed);
-    ctx->post_time = 0;
-    ctx->progress_time = 0;
-    ctx->total_time = 0;
+    ctx->producer_idx = 0;
 
-    memset(&ctx->desc, 0, sizeof(CommDescriptor));
+    for (int i { 0 }; i < NUM_SLOTS; i++) {
+        ctx->slots[i].state.store(static_cast<int>(ServletState::IDLE), std::memory_order_relaxed);
+        ctx->slots[i].send_buffer = nullptr;
+        ctx->slots[i].send_buffer_capacity = 0;
+        ctx->slots[i].sizes_storage = nullptr;
+        ctx->slots[i].sizes_ngroup = 0;
+        ctx->slots[i].post_time = 0;
+        ctx->slots[i].progress_time = 0;
+        ctx->slots[i].total_time = 0;
+        memset(&ctx->slots[i].desc, 0, sizeof(CommDescriptor));
+    }
 
     int rc = pthread_create(&ctx->thread, nullptr, servlet_thread_fn, ctx);
     if (rc != 0) {
@@ -190,31 +203,57 @@ int servlet_init(ServletContext *ctx, const ServletConfig *config) {
 int servlet_shutdown(ServletContext *ctx) {
     if (!ctx->thread_active) return 0;
 
+    /* wait for any in-flight work first */
+    servlet_wait(ctx);
+
     ctx->shutdown.store(true, std::memory_order_release);
     pthread_join(ctx->thread, nullptr);
     ctx->thread_active = false;
+
+    /* free slot-owned buffers */
+    for (int i { 0 }; i < NUM_SLOTS; i++) {
+        if (ctx->slots[i].send_buffer) {
+            free(ctx->slots[i].send_buffer);
+            ctx->slots[i].send_buffer = nullptr;
+        }
+        if (ctx->slots[i].sizes_storage) {
+            free(ctx->slots[i].sizes_storage);
+            ctx->slots[i].sizes_storage = nullptr;
+        }
+    }
+
     return 0;
 }
 
 void servlet_submit(ServletContext *ctx) {
-    ctx->state.store(static_cast<int>(ServletState::READY), std::memory_order_release);
+    int slot { ctx->producer_idx };
+    ctx->slots[slot].state.store(static_cast<int>(ServletState::READY), std::memory_order_release);
+    ctx->producer_idx = 1 - slot;
 }
 
 void servlet_wait(ServletContext *ctx) {
-    while (ctx->state.load(std::memory_order_acquire) != static_cast<int>(ServletState::DONE)) {
-        // next iteration of phase 1 to pipeline across iterations?
-        // useful computation?
-        // spin for now
+    for (int i { 0 }; i < NUM_SLOTS; i++) {
+        while (true) {
+            int s { ctx->slots[i].state.load(std::memory_order_acquire) };
+            if (s == static_cast<int>(ServletState::IDLE)) break;
+            if (s == static_cast<int>(ServletState::DONE)) {
+                ctx->slots[i].state.store(static_cast<int>(ServletState::IDLE), std::memory_order_release);
+                break;
+            }
+            /* READY: still in-flight, spin */
+        }
     }
-    ctx->state.store(static_cast<int>(ServletState::IDLE), std::memory_order_release);
 }
 
 bool servlet_test(ServletContext *ctx) {
-    if (ctx->state.load(std::memory_order_acquire) == static_cast<int>(ServletState::DONE)) {
-        ctx->state.store(static_cast<int>(ServletState::IDLE), std::memory_order_release);
-        return true;
+    for (int i { 0 }; i < NUM_SLOTS; i++) {
+        int s { ctx->slots[i].state.load(std::memory_order_acquire) };
+        if (s == static_cast<int>(ServletState::READY)) return false;
+        if (s == static_cast<int>(ServletState::DONE)) {
+            ctx->slots[i].state.store(static_cast<int>(ServletState::IDLE), std::memory_order_release);
+        }
     }
-    return false;
+    return true;
 }
 
 } /* namespace async_rbruck_alltoallv */
