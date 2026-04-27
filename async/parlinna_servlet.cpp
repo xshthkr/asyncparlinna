@@ -34,7 +34,7 @@ static double SP_time          { 0 };
 
 namespace async_rbruck_alltoallv {
 
-ParLinNa_Handle* ParLinNa_Init_handle(MPI_Comm comm, int n, int typesize) {
+ParLinNa_Handle* ParLinNa_Init_handle(MPI_Comm comm, int n, int r, int typesize) {
     int rank, nprocs;
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &nprocs);
@@ -45,6 +45,33 @@ ParLinNa_Handle* ParLinNa_Init_handle(MPI_Comm comm, int n, int typesize) {
     handle->n = n;
     handle->ngroup = nprocs / n;
     handle->typesize = typesize;
+    
+    handle->r = r;
+    if (handle->r > handle->n) { handle->r = handle->n; }
+    handle->sw = ceil(log(handle->n) / float(log(handle->r)));
+    handle->grank = rank % handle->n;
+    handle->gid = rank / handle->n;
+    int imax = rbruck_alltoallv_utils::pow(handle->r, handle->sw - 1) * handle->ngroup;
+    handle->max_sd = (handle->ngroup > imax) ? handle->ngroup : imax;
+
+    handle->updated_sentcounts = new int[nprocs];
+    handle->rotate_index_array = new int[nprocs];
+    handle->pos_status = new int[nprocs];
+    handle->sent_blocks = new int[handle->max_sd];
+    
+    // pre-calculate local index array after rotation
+    int id = 0;
+    for (int i = 0; i < handle->ngroup; i++) {
+        int gsp = i * handle->n;
+        for (int j = 0; j < handle->n; j++) {
+            handle->rotate_index_array[id++] = gsp + (2 * handle->grank - j + handle->n) % handle->n;
+        }
+    }
+
+    handle->extra_buffer_capacity = 0;
+    handle->extra_buffer = nullptr;
+    handle->temp_recv_capacity = 0;
+    handle->temp_recv_buffer = nullptr;
 
     for (int i = 0; i < 2; i++) {
         handle->buffers[i].temp_send_capacity = 0;
@@ -59,6 +86,15 @@ ParLinNa_Handle* ParLinNa_Init_handle(MPI_Comm comm, int n, int typesize) {
 
 void ParLinNa_Free_handle(ParLinNa_Handle* handle) {
     if (!handle) return;
+    
+    delete[] handle->updated_sentcounts;
+    delete[] handle->rotate_index_array;
+    delete[] handle->pos_status;
+    delete[] handle->sent_blocks;
+    
+    if (handle->extra_buffer) free(handle->extra_buffer);
+    if (handle->temp_recv_buffer) free(handle->temp_recv_buffer);
+    
     for (int i { 0 }; i < 2; i++) {
         if (handle->buffers[i].temp_send_buffer) {
             free(handle->buffers[i].temp_send_buffer);
@@ -81,29 +117,18 @@ int ParLinNa_Phase1(
     double st { MPI_Wtime() };
 	if ( r < 2 ) { return -1; }
 
-    int rank, nprocs;
-    MPI_Comm_rank(comm, &rank);
-    MPI_Comm_size(comm, &nprocs);
-
+    int nprocs { handle->nprocs };
     int n { handle->n };
-    if ( r > n ) { r = n; };
-
     int typesize { handle->typesize };
     int ngroup { handle->ngroup };
     
-    int sw = ceil(log(n) / float(log(r)));
-    int grank { rank % n };
-    int gid { rank / n };
-    int imax { rbruck_alltoallv_utils::pow(r, sw-1) * ngroup };
-    int max_sd { (ngroup > imax) ? ngroup : imax };
+    int sw { handle->sw };
+    int grank { handle->grank };
+    int gid { handle->gid };
+    int max_sd { handle->max_sd };
 
     int local_max_count { 0 };
     int max_send_count { 0 };
-    int id { 0 };
-    int updated_sentcounts[nprocs];
-    int rotate_index_array[nprocs];
-    int pos_status[nprocs];
-    int sent_blocks[max_sd];
     
     double et { MPI_Wtime() };
     init_time = et - st;
@@ -119,31 +144,37 @@ int ParLinNa_Phase1(
     findMax_time = et - st;
 
     st = MPI_Wtime();
-    // 2. create local index array after rotation
-	for (int i { 0 }; i < ngroup; i++) {
-		int gsp { i * n };
-		for (int j { 0 }; j < n; j++) {
-            rotate_index_array[id++] = gsp + (2 * grank - j + n) % n;
-        }
-    }
+    // 2. local index array after rotation is already computed in Init_handle
     et = MPI_Wtime();
     rotateIndex_time = et - st;
 
     st = MPI_Wtime();
-    memset(pos_status, 0, nprocs * sizeof(int));
-    memcpy(updated_sentcounts, sendcounts, nprocs * sizeof(int));
+    memset(handle->pos_status, 0, nprocs * sizeof(int));
+    memcpy(handle->updated_sentcounts, sendcounts, nprocs * sizeof(int));
 
-    // double buffering resize if necessary
-    int required_capacity = max_send_count * typesize * nprocs;
+    // buffer resizes if necessary
+    int req_temp_send = max_send_count * typesize * nprocs;
     ParLinNa_BufferState &buf_state = handle->buffers[handle->current_idx];
-    if (required_capacity > buf_state.temp_send_capacity) {
+    if (req_temp_send > buf_state.temp_send_capacity) {
         if (buf_state.temp_send_buffer) free(buf_state.temp_send_buffer);
-        buf_state.temp_send_buffer = (char*) malloc(required_capacity);
-        buf_state.temp_send_capacity = required_capacity;
+        buf_state.temp_send_buffer = (char*) malloc(req_temp_send);
+        buf_state.temp_send_capacity = req_temp_send;
     }
     
-    char *extra_buffer = (char*) malloc(max_send_count * typesize * nprocs);
-    char *temp_recv_buffer = (char*) malloc(max_send_count * typesize * max_sd);
+    int req_extra = max_send_count * typesize * nprocs;
+    if (req_extra > handle->extra_buffer_capacity) {
+        if (handle->extra_buffer) free(handle->extra_buffer);
+        handle->extra_buffer = (char*) malloc(req_extra);
+        handle->extra_buffer_capacity = req_extra;
+    }
+    
+    int req_temp_recv = max_send_count * typesize * max_sd;
+    if (req_temp_recv > handle->temp_recv_capacity) {
+        if (handle->temp_recv_buffer) free(handle->temp_recv_buffer);
+        handle->temp_recv_buffer = (char*) malloc(req_temp_recv);
+        handle->temp_recv_capacity = req_temp_recv;
+    }
+
     et = MPI_Wtime();
     alcCopy_time = et - st;
 
@@ -156,10 +187,10 @@ int ParLinNa_Phase1(
 
     int spoint { 1 };
     int distance { 1 };
-    int next_distance { r };
+    int next_distance { handle->r };
     int di { 0 };
 	for (int x { 0 }; x < sw; x++) {
-		for (int z { 1 }; z < r; z++) {
+		for (int z { 1 }; z < handle->r; z++) {
             di = 0;
             spoint = z * distance;
 			if (spoint > n - 1) {break;}
@@ -171,7 +202,7 @@ int ParLinNa_Phase1(
 					for (int j { i }; j < (i + distance); j++) {
 						if (j > n - 1 ) { break; }
                         int id = g * n + (j + grank) % n;
-                        sent_blocks[di++] = id;
+                        handle->sent_blocks[di++] = id;
                     }
                 }
             }
@@ -184,14 +215,14 @@ int ParLinNa_Phase1(
             int sendCount { 0 };
             int offset { 0 };
 			for (int i { 0 }; i < di; i++) {
-				int send_index { rotate_index_array[sent_blocks[i]] };
-                metadata_send[i] = updated_sentcounts[send_index];
+				int send_index { handle->rotate_index_array[handle->sent_blocks[i]] };
+                metadata_send[i] = handle->updated_sentcounts[send_index];
 
-                if (pos_status[send_index] == 0)
-                    memcpy(&buf_state.temp_send_buffer[offset], &sendbuf[sdispls[send_index] * typesize], updated_sentcounts[send_index] * typesize);
+                if (handle->pos_status[send_index] == 0)
+                    memcpy(&buf_state.temp_send_buffer[offset], &sendbuf[sdispls[send_index] * typesize], handle->updated_sentcounts[send_index] * typesize);
                 else
-                    memcpy(&buf_state.temp_send_buffer[offset], &extra_buffer[sent_blocks[i] * max_send_count * typesize], updated_sentcounts[send_index] * typesize);
-                offset += updated_sentcounts[send_index] * typesize;
+                    memcpy(&buf_state.temp_send_buffer[offset], &handle->extra_buffer[handle->sent_blocks[i] * max_send_count * typesize], handle->updated_sentcounts[send_index] * typesize);
+                offset += handle->updated_sentcounts[send_index] * typesize;
             }
 
 			int recv_proc { gid * n + (grank + spoint) % n };       // receive data from rank + 2^step process
@@ -211,7 +242,7 @@ int ParLinNa_Phase1(
 
             st = MPI_Wtime();
             // 4) exchange data
-            MPI_Sendrecv(buf_state.temp_send_buffer, offset, MPI_CHAR, send_proc, 1, temp_recv_buffer, sendCount*typesize, MPI_CHAR, recv_proc, 1, comm, MPI_STATUS_IGNORE);
+            MPI_Sendrecv(buf_state.temp_send_buffer, offset, MPI_CHAR, send_proc, 1, handle->temp_recv_buffer, sendCount*typesize, MPI_CHAR, recv_proc, 1, comm, MPI_STATUS_IGNORE);
             et = MPI_Wtime();
             excgData_time += et - st;
 
@@ -219,47 +250,39 @@ int ParLinNa_Phase1(
             // 5) replace
             offset = 0;
 			for (int i { 0 }; i < di; i++) {
-                int send_index = rotate_index_array[sent_blocks[i]];
+                int send_index = handle->rotate_index_array[handle->sent_blocks[i]];
 
-                memcpy(&extra_buffer[sent_blocks[i] * max_send_count * typesize], &temp_recv_buffer[offset], metadata_recv[i] * typesize);
+                memcpy(&handle->extra_buffer[handle->sent_blocks[i] * max_send_count * typesize], &handle->temp_recv_buffer[offset], metadata_recv[i] * typesize);
 
                 offset += metadata_recv[i] * typesize;
-                pos_status[send_index] = 1;
-                updated_sentcounts[send_index] = metadata_recv[i];
+                handle->pos_status[send_index] = 1;
+                handle->updated_sentcounts[send_index] = metadata_recv[i];
             }
             et = MPI_Wtime();
             replace_time += et - st;
 
         }
-        distance *= r;
-        next_distance *= r;
+        distance *= handle->r;
+        next_distance *= handle->r;
     }
 
     st = MPI_Wtime();
     // organize data into temp_send_buffer for inter-node scatter
     int index { 0 };
     for (int i { 0 }; i < nprocs; i++) {
-        int d { updated_sentcounts[rotate_index_array[i]] * typesize };
+        int d { handle->updated_sentcounts[handle->rotate_index_array[i]] * typesize };
         if (grank == (i % n)) {
             memcpy(&buf_state.temp_send_buffer[index], &sendbuf[sdispls[i] * typesize], d);
         } else {
-            memcpy(&buf_state.temp_send_buffer[index], &extra_buffer[i * max_send_count * typesize], d);
+            memcpy(&buf_state.temp_send_buffer[index], &handle->extra_buffer[i * max_send_count * typesize], d);
         }
         index += d;
     }
     et = MPI_Wtime();
     orgData_time = et - st;
 
-    free(temp_recv_buffer);
-    free(extra_buffer);
-
-
-	/*
-	PHASE 2: inter-node scatter via comm servlet
-
-	compute per-node send/recv sizes and displacements (in bytes),
-	fill the servlet's CommDescriptor, submit, and wait
-	*/
+    free(handle->temp_recv_buffer);
+    free(handle->extra_buffer);
 
     st = MPI_Wtime();
 
@@ -276,7 +299,7 @@ int ParLinNa_Phase1(
         int nrecv_elems { 0 };
         for (int j { 0 }; j < n; j++) {
             int id { i * n + j };
-            int sn { updated_sentcounts[rotate_index_array[id]] };
+            int sn { handle->updated_sentcounts[handle->rotate_index_array[id]] };
             nsend_elems += sn;
             nrecv_elems += recvcounts[id];
         }
@@ -300,6 +323,14 @@ int ParLinNa_Phase2_submit(
     char *recvbuf, int *rdispls, MPI_Datatype recvtype,
     MPI_Comm comm, ServletContext *servlet_ctx)
 {
+
+	/*
+	PHASE 2: inter-node scatter via comm servlet
+
+	compute per-node send/recv sizes and displacements (in bytes),
+	fill the servlet's CommDescriptor, submit, and wait
+	*/
+
     double st { MPI_Wtime() };
     
     int rank;
@@ -346,7 +377,7 @@ int ParLinNa_servlet(
     int typesize;
     MPI_Type_size(sendtype, &typesize);
 
-    ParLinNa_Handle* handle = ParLinNa_Init_handle(comm, n, typesize);
+    ParLinNa_Handle* handle = ParLinNa_Init_handle(comm, n, r, typesize);
     
     ParLinNa_Phase1(handle, r, sendbuf, sendcounts, sdispls, sendtype, recvcounts, recvtype, comm);
     

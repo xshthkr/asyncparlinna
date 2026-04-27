@@ -46,10 +46,27 @@ struct ParLinNa_Handle {
     int ngroup;
     int n;
     int typesize;
+    
+    int r;
+    int sw;
+    int grank;
+    int gid;
+    int max_sd;
+    
+    int *updated_sentcounts;
+    int *rotate_index_array;
+    int *pos_status;
+    int *sent_blocks;
+    
+    char *extra_buffer;
+    int extra_buffer_capacity;
+    char *temp_recv_buffer;
+    int temp_recv_capacity;
+    
     ParLinNa_BufferState buffers[2];
 };
 
-ParLinNa_Handle* ParLinNa_Init_handle(MPI_Comm comm, int n, int typesize);
+ParLinNa_Handle* ParLinNa_Init_handle(MPI_Comm comm, int n, int r, int typesize);
 
 void ParLinNa_Free_handle(ParLinNa_Handle* handle);
 

@@ -76,14 +76,17 @@ int main(int argc, char **argv) {
     long long **sendbufs = new long long*[num_iters];
     long long **recvbufs_seq = new long long*[num_iters];
     long long **recvbufs_pipe = new long long*[num_iters];
+    long long **recvbufs_native = new long long*[num_iters];
 
     for (int i { 0 }; i<num_iters; i++) {
         sendbufs[i] = new long long[soffset];
         recvbufs_seq[i] = new long long[roffset];
         recvbufs_pipe[i] = new long long[roffset];
+        recvbufs_native[i] = new long long[roffset];
         
         memset(recvbufs_seq[i], 0, roffset * sizeof(long long));
         memset(recvbufs_pipe[i], 0, roffset * sizeof(long long));
+        memset(recvbufs_native[i], 0, roffset * sizeof(long long));
         
         int idx { 0 };
         for (int p { 0 }; p < nprocs; p++) {
@@ -100,7 +103,7 @@ int main(int argc, char **argv) {
 
     int typesize;
     MPI_Type_size(MPI_LONG_LONG, &typesize);
-    async_rbruck_alltoallv::ParLinNa_Handle* handle = async_rbruck_alltoallv::ParLinNa_Init_handle(MPI_COMM_WORLD, n, typesize);
+    async_rbruck_alltoallv::ParLinNa_Handle* handle = async_rbruck_alltoallv::ParLinNa_Init_handle(MPI_COMM_WORLD, n, r, typesize);
 
     /* SEQUENTIAL LOOP */
     MPI_Barrier(MPI_COMM_WORLD);
@@ -136,11 +139,21 @@ int main(int argc, char **argv) {
     async_rbruck_alltoallv::servlet_shutdown(&servlet_ctx);
     async_rbruck_alltoallv::ParLinNa_Free_handle(handle);
 
-    // check results
+    /* 3. NATIVE MPI_Alltoallv LOOP */
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t_native_start { MPI_Wtime() };
+    for (int i { 0 }; i < num_iters; i++) {
+        MPI_Alltoallv(sendbufs[i], sendcounts, sdispls, MPI_LONG_LONG,
+                      recvbufs_native[i], recvcounts, rdispls, MPI_LONG_LONG,
+                      MPI_COMM_WORLD);
+    }
+    double t_native { MPI_Wtime() - t_native_start };
+
+    // check results against native MPI_Alltoallv
     int errors { 0 };
     for (int i { 0 }; i < num_iters; i++) {
         for (int j { 0 }; j < roffset; j++) {
-            if (recvbufs_seq[i][j] != recvbufs_pipe[i][j]) {
+            if (recvbufs_native[i][j] != recvbufs_pipe[i][j]) {
                 errors++;
             }
         }
@@ -150,23 +163,30 @@ int main(int argc, char **argv) {
     MPI_Reduce(&errors, &total_errors, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     double max_t_seq { 0 };
-    int max_t_pipe { 0 };
+    double max_t_pipe { 0 };
+    double max_t_native { 0 };
     MPI_Reduce(&t_seq, &max_t_seq, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&t_pipe, &max_t_pipe, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&t_native, &max_t_native, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
         std::cout << "Sasha's beloved ParLinNa Overlap Test (" << num_iters << " iters)" << std::endl;
         std::cout << "procs=" << nprocs << " n=" << n << " r=" << r << " bblock=" << bblock << " msg_size=" << msg_size << std::endl;
-        std::cout << "sequential loop: " << max_t_seq << "s" << std::endl;
-        std::cout << "pipelined loop:  " << max_t_pipe << "s" << std::endl;
+        std::cout << "native alltoallv: " << max_t_native << "s" << std::endl;
+        std::cout << "sequential loop:  " << max_t_seq << "s" << std::endl;
+        std::cout << "pipelined loop:   " << max_t_pipe << "s" << std::endl;
         
         if (max_t_pipe < max_t_seq) {
             double speedup { (max_t_seq - max_t_pipe) / max_t_seq * 100.0 };
-            std::cout << "overlap speedup: " << speedup << "%" << std::endl;
+            std::cout << "overlap speedup over seq: " << speedup << "%" << std::endl;
+        }
+        if (max_t_pipe < max_t_native) {
+            double native_speedup { (max_t_native - max_t_pipe) / max_t_native * 100.0 };
+            std::cout << "speedup over native MPI:  " << native_speedup << "%" << std::endl;
         }
 
         if (total_errors == 0) {
-            std::cout << "PASS: pipelined results match sequential exactly (yipee)" << std::endl;
+            std::cout << "PASS: pipelined results match native MPI exactly (yipee)" << std::endl;
         } else {
             std::cout << "FAIL: " << total_errors << " mismatches (womp womp)" << std::endl;
         }
@@ -176,6 +196,7 @@ int main(int argc, char **argv) {
         delete[] sendbufs[i];
         delete[] recvbufs_seq[i];
         delete[] recvbufs_pipe[i];
+        delete[] recvbufs_native[i];
     }
     delete[] sendbufs;
     delete[] recvbufs_seq;
