@@ -123,12 +123,17 @@ int main(int argc, char **argv) {
             for (int bsize { 1 }; bsize <= ngroup; bsize *= 2) {
                 std::vector<int> chunk_counts;
                 int chunk { 2 };
-                while (chunk <= ncores ) {
+                while (chunk <= msg_size ) {
                     chunk_counts.push_back(chunk);
                     chunk *= 2;
                 }
                 if (chunk_counts.empty()) {
                     chunk_counts.push_back(1);
+                }
+
+                int valid_configs { 0 };
+                for (int c { 0 }; c < chunk_counts.size(); c++) {
+                    if (chunk_counts[c] <= msg_size) valid_configs++;
                 }
 
                 async_rbruck_alltoallv::ServletConfig cfg { async_rbruck_alltoallv::servlet_default_config() };
