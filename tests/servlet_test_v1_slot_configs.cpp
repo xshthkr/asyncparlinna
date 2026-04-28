@@ -6,7 +6,7 @@
  * message size, compares to MPI_Alltoallv, and repeats for the requested
  * number of iterations
  *
- * usage: mpirun -n <nprocs> ./servlet_test_v1_configs <loop-count> <n> <bblock> <radix-list...>
+ * usage: mpirun -n <nprocs> ./servlet_test_v1_slot_configs <loop-count> <n> <bblock> <radix-list...>
  *
  *      Author: xshthkr
  */
