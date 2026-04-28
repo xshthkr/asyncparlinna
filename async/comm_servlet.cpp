@@ -114,7 +114,7 @@ static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
             int nsrc { (gid + i + ii) % ngroup };
             int src { nsrc * n + grank };
 
-            MPI_Irecv(&desc->recv_buf[desc->recv_displs[nsrc]], desc->recv_sizes[nsrc], MPI_CHAR, src, 0, comm, &reqs[req_cnt++]);
+            MPI_Irecv(&desc->recv_buf[desc->recv_displs[nsrc]], desc->recv_sizes[nsrc], MPI_CHAR, src, 2, comm, &reqs[req_cnt++]);
         }
 
         /* post sends */
@@ -122,7 +122,7 @@ static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
             int ndst { (gid - i - ii + ngroup) % ngroup };
             int dst { ndst * n + grank };
 
-            MPI_Isend(&desc->send_buf[desc->send_displs[ndst]], desc->send_sizes[ndst], MPI_CHAR, dst, 0, comm, &reqs[req_cnt++]);
+            MPI_Isend(&desc->send_buf[desc->send_displs[ndst]], desc->send_sizes[ndst], MPI_CHAR, dst, 2, comm, &reqs[req_cnt++]);
         }
 
         double post_end { MPI_Wtime() };
