@@ -42,14 +42,14 @@ int main(int argc, char **argv) {
     if (argc < 5) {
         if (rank == 0) {
             std::cout << "Usage: mpirun -n <nprocs> " << argv[0]
-                      << " <loop-count> <n> <bblock> <radix-list...>" << std::endl;
+                      << " <loop-count> <ncores-per-node> <bblock> <radix-list...>" << std::endl;
         }
         MPI_Finalize();
         return 1;
     }
 
     int loopcount { std::atoi(argv[1]) };
-    int n { std::atoi(argv[2]) };
+    int ncores { std::atoi(argv[2]) };
     int bblock = std::atoi(argv[3]);
     std::vector<int> radix_list;
     for (int arg { 4 }; arg < argc; ++arg) {
@@ -64,15 +64,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (nprocs % n != 0) {
+    if (nprocs % ncores != 0) {
         if (rank == 0) {
-            std::cerr << "ERROR: nprocs (" << nprocs << ") must be divisible by n (" << n << ")" << std::endl;
+            std::cerr << "ERROR: nprocs (" << nprocs << ") must be divisible by n (" << ncores << ")" << std::endl;
         }
         MPI_Finalize();
         return 1;
     }
 
-    int ngroup { nprocs / n };
+    int ngroup { nprocs / ncores };
     std::mt19937_64 rng(static_cast<unsigned long long>(std::chrono::high_resolution_clock::now().time_since_epoch().count()) + rank);
 
     for (int msg_size { 2 }; msg_size <= 1024; msg_size *= 2) {
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
                     t0 = MPI_Wtime();
                     for (int i { 0 }; i < NUM_ITERS; i++) {
                         async_rbruck_alltoallv::ParLinNa_servlet(
-                            n, radix, bblock,
+                            ncores, radix, bblock,
                             (char*)sendbuf, sendcounts, sdispls, MPI_LONG_LONG,
                             (char*)recv_pipe[i], recvcounts, rdispls, MPI_LONG_LONG,
                             MPI_COMM_WORLD, &servlet_ctx);
@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
                     total_errors += global_errors;
 
                     if (rank == 0) {
-                        std::cout << "[ServletV1Slot] " << nprocs << ", " << n << ", " << bsize << ", " << radix << ", " << max_elapsed << std::endl; 
+                        std::cout << "[ServletV1Slot] " << nprocs << ", " << msg_size << ", " << bsize << ", " << radix << ", " << max_elapsed << std::endl; 
                         // std::cout << "[msg=" << msg_size << ", radix=" << radix << ", b=" << bsize
                         //           << ", iter=" << it << "] max_time=" << max_elapsed
                         //           << "s errors=" << global_errors << std::endl;
