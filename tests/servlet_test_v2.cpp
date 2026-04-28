@@ -19,6 +19,7 @@
 #include "../async/comm_servlet.h"
 
 #include <iostream>
+#include <vector>
 #include <cstdlib>
 #include <cstring>
 #include <mpi.h>
@@ -124,8 +125,11 @@ int main(int argc, char **argv) {
     double t_v1 { MPI_Wtime() - t0 };
 
     /* 4. ParLinNa_servlet_v2 with varying chunk counts */
-    int chunk_counts[] = { 2, 4, 8 };
-    int num_configs { 3 };
+    // int chunk_counts[] = { 2, 4, 8 };
+    // int num_configs { 3 };
+    std::vector<int> chunk_counts;
+    for (int i { 2 }; i <= n; i = i * 2) { chunk_counts.push_back(i); }     // maybe cap till n/2 ???
+    size_t num_configs { chunk_counts.size() };
 
     // skip chunk counts that exceed msg_size (can't split 1 element into 4 chunks)
     // find how many are valid
