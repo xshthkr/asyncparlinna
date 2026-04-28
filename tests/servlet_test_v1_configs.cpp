@@ -114,9 +114,9 @@ int main(int argc, char **argv) {
                       MPI_COMM_WORLD);
         double t_mpi { MPI_Wtime() - t0 };
 
-        if (rank == 0) {
-            std::cout << "\n[msg_size=" << msg_size << "] MPI_Alltoallv baseline: " << t_mpi << "s" << std::endl;
-        }
+        // if (rank == 0) {
+        //     std::cout << "\n[msg_size=" << msg_size << "] MPI_Alltoallv baseline: " << t_mpi << "s" << std::endl;
+        // }
 
         for (int r_value : radix_list) {
             int radix { r_value };
@@ -179,9 +179,8 @@ int main(int argc, char **argv) {
                     // std::cout << "[msg=" << msg_size << ", radix=" << radix << ", b=" << bsize << "] "
                     //           << "best_max_time=" << max_time_for_config << "s";
                     if (total_errors != 0) {
-                        std::cout << " FAIL(total_errors=" << total_errors << ")";
+                        std::cout << " FAIL(total_errors=" << total_errors << ")" << std::endl;
                     }
-                    std::cout << std::endl;
                 }
             }
         }
