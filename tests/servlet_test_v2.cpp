@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
     // int num_configs { 6 };
     std::vector<int> chunk_counts;
     int chunk = 2;
-    while (chunk <= msg_size / 2) {
+    while (chunk <= n / 2) {
         chunk_counts.push_back(chunk);
         chunk *= 2;
     }

@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
             for (int bsize { 1 }; bsize <= ngroup; bsize *= 2) {
                 std::vector<int> chunk_counts;
                 int chunk { 2 };
-                while (chunk <= msg_size / 2) {
+                while (chunk <= ncores ) {
                     chunk_counts.push_back(chunk);
                     chunk *= 2;
                 }
@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
                         total_errors += global_errors;
 
                         if (rank == 0) {
-                            std::cout << "[ServletV2Chunk] " << nprocs << ", " << msg_size << ", " << bsize << ", " << radix << ", " << max_elapsed << std::endl;
+                            std::cout << "[ServletV2Chunk] " << nprocs << ", " << msg_size << num_chunks << ", " << bsize << ", " << radix << ", " << max_elapsed << std::endl;
                             // std::cout << "[ServletV2Chunk] msg=" << msg_size
                             //           << " radix=" << radix
                             //           << " b=" << bsize
