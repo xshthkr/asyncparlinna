@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
             for (int bsize { 1 }; bsize <= ngroup; bsize *= 2) {
                 std::vector<int> chunk_counts;
                 int chunk { 2 };
-                while (chunk <= msg_size ) {
+                while (chunk <= msg_size && chunk <= 64 ) {
                     chunk_counts.push_back(chunk);
                     chunk *= 2;
                 }
