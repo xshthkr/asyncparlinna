@@ -131,8 +131,10 @@ static int run_phase1_chunk(
 		if (chunk_sendcounts[i] > local_max_count)
 			local_max_count = chunk_sendcounts[i];
 	}
-	// CHECK_CALL(MPI_Allreduce(&local_max_count, &max_send_count, 1, MPI_INT, MPI_MAX, comm));
-    MPI_Allreduce(&local_max_count, &max_send_count, 1, MPI_INT, MPI_MAX, comm);
+	{
+		std::lock_guard<std::mutex> lock(mpi_mutex);
+		MPI_Allreduce(&local_max_count, &max_send_count, 1, MPI_INT, MPI_MAX, comm);
+	}
 	et = MPI_Wtime();
 	findMax_time += et - st;
 
@@ -211,9 +213,12 @@ static int run_phase1_chunk(
 			// CHECK_CALL(MPI_Sendrecv(metadata_send, di, MPI_INT, send_proc, 0,
 			// 			 metadata_recv, di, MPI_INT, recv_proc, 0,
 			// 			 comm, MPI_STATUS_IGNORE));
-			MPI_Sendrecv(metadata_send, di, MPI_INT, send_proc, 0,
+			{
+				std::lock_guard<std::mutex> lock(mpi_mutex);
+				MPI_Sendrecv(metadata_send, di, MPI_INT, send_proc, 0,
 						 metadata_recv, di, MPI_INT, recv_proc, 0,
 						 comm, MPI_STATUS_IGNORE);
+			}
 			for (int i { 0 }; i < di; i++) sendCount += metadata_recv[i];
 			et = MPI_Wtime();
 			excgMeta_time += et - st;
@@ -222,9 +227,12 @@ static int run_phase1_chunk(
 			// CHECK_CALL(MPI_Sendrecv(temp_send_buffer, offset, MPI_CHAR, send_proc, 1,
 			// 			 temp_recv_buffer, sendCount * typesize, MPI_CHAR, recv_proc, 1,
 			// 			 comm, MPI_STATUS_IGNORE));
-			MPI_Sendrecv(temp_send_buffer, offset, MPI_CHAR, send_proc, 1,
+			{
+				std::lock_guard<std::mutex> lock(mpi_mutex);
+				MPI_Sendrecv(temp_send_buffer, offset, MPI_CHAR, send_proc, 1,
 						 temp_recv_buffer, sendCount * typesize, MPI_CHAR, recv_proc, 1,
 						 comm, MPI_STATUS_IGNORE);
+			}
 			et = MPI_Wtime();
 			excgData_time += et - st;
 

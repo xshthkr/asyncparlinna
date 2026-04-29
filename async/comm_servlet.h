@@ -24,11 +24,14 @@
 #include <pthread.h>
 #include <atomic>
 #include <cstddef>
+#include <mutex>
 
 namespace async_rbruck_alltoallv {
 
 /* number of double-buffer slots for pipelining */
 static const int NUM_SLOTS = 2;
+
+extern std::mutex mpi_mutex;
 
 /*
 servlet work states (main thread <-> comm thread handoff)

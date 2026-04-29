@@ -29,6 +29,8 @@
 
 namespace async_rbruck_alltoallv {
 
+std::mutex mpi_mutex;
+
 /*
 INTERNAL APIS
 */
@@ -131,7 +133,10 @@ static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
             int src { nsrc * n + grank };
 
             // CHECK_CALL(MPI_Irecv(&desc->recv_buf[desc->recv_displs[nsrc]], desc->recv_sizes[nsrc], MPI_CHAR, src, 2, comm, &reqs[req_cnt++]));
+        {
+            std::lock_guard<std::mutex> lock(mpi_mutex);
             MPI_Irecv(&desc->recv_buf[desc->recv_displs[nsrc]], desc->recv_sizes[nsrc], MPI_CHAR, src, 2, comm, &reqs[req_cnt++]);
+        }
         }
 
         /* post sends */
@@ -139,7 +144,10 @@ static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
             int ndst { (gid - i - ii + ngroup) % ngroup };
             int dst { ndst * n + grank };
 
-            CHECK_CALL(MPI_Isend(&desc->send_buf[desc->send_displs[ndst]], desc->send_sizes[ndst], MPI_CHAR, dst, 2, comm, &reqs[req_cnt++]));
+            {
+                std::lock_guard<std::mutex> lock(mpi_mutex);
+                MPI_Isend(&desc->send_buf[desc->send_displs[ndst]], desc->send_sizes[ndst], MPI_CHAR, dst, 2, comm, &reqs[req_cnt++]);
+            }
         }
 
         double post_end { MPI_Wtime() };
@@ -154,11 +162,18 @@ static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
             int indices[2 * bblock];
             MPI_Status tst[2 * bblock];
 
-            int ret { MPI_Testsome(req_cnt, reqs, &outcount, indices, tst) };
+            int ret;
+            {
+                std::lock_guard<std::mutex> lock(mpi_mutex);
+                ret = MPI_Testsome(req_cnt, reqs, &outcount, indices, tst);
+            }
 
             if (ret != MPI_SUCCESS) {
                 /* fallback: force completion */
-                MPI_Waitall(req_cnt, reqs, stats);
+                {
+                    std::lock_guard<std::mutex> lock(mpi_mutex);
+                    MPI_Waitall(req_cnt, reqs, stats);
+                }
                 completed_total = req_cnt;
                 break;
             }
@@ -175,7 +190,10 @@ static void execute_transfers(ServletSlot *slot, const ServletConfig *config) {
                 /* no progress, check deadlock timeout */
                 if (monotonic_seconds() > deadline) {
                     fprintf(stderr, "[comm_servlet] WARN: no progress for %ds, falling back to MPI_Waitall\n", config->deadlock_timeout_s);
-                    MPI_Waitall(req_cnt, reqs, stats);
+                    {
+                        std::lock_guard<std::mutex> lock(mpi_mutex);
+                        MPI_Waitall(req_cnt, reqs, stats);
+                    }
                     completed_total = req_cnt;
                     break;
                 }
