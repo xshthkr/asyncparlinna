@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
     int ngroup { nprocs / ncores };
     std::mt19937_64 rng(static_cast<unsigned long long>(std::chrono::high_resolution_clock::now().time_since_epoch().count()) + rank);
 
-    for (int msg_size { 2 }; msg_size <= 1024; msg_size *= 2) {
+    for (int msg_size { 1 }; msg_size <= 134217728; msg_size *= 2) {
         int sendcounts[nprocs];
         int sdispls[nprocs];
         int recvcounts[nprocs];
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
                     MPI_Barrier(MPI_COMM_WORLD);
                     t0 = MPI_Wtime();
                     async_rbruck_alltoallv::ParLinNa_servlet(
-                        ncores, radix, bblock,
+                        ncores, radix, bsize,
                         reinterpret_cast<char*>(sendbuf), sendcounts, sdispls, MPI_LONG_LONG,
                         reinterpret_cast<char*>(recv_srv), recvcounts, rdispls, MPI_LONG_LONG,
                         MPI_COMM_WORLD, &servlet_ctx);
