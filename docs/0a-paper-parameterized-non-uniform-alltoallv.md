@@ -8,9 +8,9 @@ In `MPI_Alltoallv` process i sends `send_sizes[i][j]` bytes to process j. This i
 - They dont leverage faster logarithmic algorithsm that work well for some data sizes
 - They ignore the hierarchy of the system (intra-node comms are faster than inter-node comms)
 
-The authors introduced 2 parameterized algorithms that can be tuned to suit the system and problem.
-- ParLogNa (parameterized logarithmic non-uniform alltoall) minimizes the number of communicaiotn steps (latency). This is significant for small message sizes. Parameterized tree construction. Tunable radix to balance depth with congestion.
-- ParLinNa (parameterized linear non-uniform alltoall) optimizes bandwidth usage and distinguishes between comms that are intra-node and inter-node. First aggregates data within nodes, then performans internode exchange with optimized pairing. Parameters to tune weights for inter-node vs intra-node costs on hardware. are two types of algorithms for `MPI_Alltoallv` (non-uniform data exchange), and both.
+The authors introduced 2 parameterized algorithms that can be tuned to suit the system and problem. These were originally known as the *TuNA* family of algorithms:
+- *ParLogNa* (originally *TuNA*): Parameterized logarithmic non-uniform alltoall. It minimizes the number of communication steps (latency). This is significant for small message sizes. Parameterized tree construction. Tunable radix to balance depth with congestion.
+- *ParLinNa* (originally *TuNA(l,g)*): Parameterized linear non-uniform alltoall. It optimizes bandwidth usage and distinguishes between comms that are intra-node and inter-node. First aggregates data within nodes, then performs internode exchange with optimized pairing. Parameters to tune weights for inter-node vs intra-node costs on hardware.
 
 Tuning the algorithms is tuning the tradeoff between minimizing latency and maximizing bandwidth. Bandwidthmaxxing by aggregating many small messages into larger transfers. Latency minimizing by reducing the number of communication rounds.
 
