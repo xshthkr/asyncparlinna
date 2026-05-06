@@ -29,7 +29,7 @@ The *ParLinNa* algorithm splits the non-uniform all-to-all MPI communication int
     - Posts non blocking MPI_Irecv/Isend
     - MPI_Waitall and state transition (`DONE`)
 
-![sqeuence-diagram-for-async-parlinna](docs/assets/async-parlinna-sequence-diagram.svg)
+![sqeuence-diagram-for-async-parlinna](docs/assets/async-parlinna-sqeuence-diagram.jpg)
 
 Why double buffering? ParLinNa is strictly two-staged pipeline:
 - CPU-bound intra-node aggregation (memory bus saturated)
