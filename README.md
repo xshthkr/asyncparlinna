@@ -48,7 +48,7 @@ Tested on dual-socket AMD EPYC 9354 (Zen 4), 2 nodes, 128 cores each, 10 GbE int
 
 ![scalability-analysis](docs/assets/scalability-analysis.png)
 
-AsyncParLinNa domincates for medium/large messages and large process counts. Overlead for small messages and small messages and small process counts. AsyncParLinNa is more scalable than other algorithms as message sizes and process counts increase.
+AsyncParLinNa dominates for medium/large messages and large process counts. Overlead for small messages and small messages and small process counts. AsyncParLinNa is more scalable than other algorithms as message sizes and process counts increase.
 
 | Algorithm | Small (≤1KB) | Medium (1KB–1MB) | Large (>1MB) |
 |-----------|--------------|------------------|--------------|
@@ -85,4 +85,4 @@ cmake --build build
 
 ---
 
-Benchmarking this project heavily uses CPU and RAM resources. This got me banned from my university's HPC cluster.
+Benchmarking this project heavily uses CPU and RAM resources. This got me temporarily banned from my university's HPC cluster.
