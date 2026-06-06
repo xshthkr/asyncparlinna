@@ -61,7 +61,7 @@ AsyncParLinNa dominates for medium/large messages and large process counts. Over
 ## Build Instructions
 
 ```bash
-git clone https://github.com/xshthkr/alltoallv-async-overlap.git
+git clone https://github.com/xshthkr/asyncparlinna.git
 cd alltoallv-async-overlap
 cmake -G Ninja -B build
 cmake --build build
